@@ -76,17 +76,17 @@ class Simulation():
 
 
         fig, axs = plt.subplots(figsize = (self.fig_width_cm, self.fig_height_cm), nrows = 3, ncols=1, sharex=True)
-        axs[0].plot(data["Time"], self._SoC, color = "tab:blue", label = "SoC")
+        axs[0].step(data["Time"], self._SoC, linewidth = 2, color = "tab:blue", label = "SoC")
         axs[0].grid()
         axs[0].legend(loc="upper right")
         axs[0].set_ylabel("SoC [%]")
 
-        axs[1].plot(data["Time"], self._v_banco, color = "tab:orange", label = "Tensão")
+        axs[1].step(data["Time"], self._v_banco, linewidth = 2, color = "tab:orange", label = "Tensão")
         axs[1].grid()
         axs[1].legend(loc="upper right")
         axs[1].set_ylabel("Tensão [V]")
 
-        axs[2].plot(data["Time"], self._i_bat, color = "tab:green", label = "Corrente")
+        axs[2].step(data["Time"], self._i_bat, linewidth = 2, color = "tab:green", label = "Corrente")
         axs[2].grid()
         axs[2].legend(loc="upper right")
         axs[2].set_ylabel("Corrente [A]")

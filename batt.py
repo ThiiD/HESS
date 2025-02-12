@@ -75,8 +75,7 @@ class Batt():
         :return float: Corrente por célula (A)
         """
         i = (power * 1000) / self._v_banco
-        ic = i / self._Np
-        return np.clip(ic, -6 * self._C, 6 * self._C)  # Limita corrente em ambas direções
+        return np.clip(i, -6 * self._Np * self._C, 6 * self._Np * self._C)  # Limita corrente em ambas direções
 
     def updateEnergy(self, current: float, dt: float) -> (float | float):
         """
@@ -87,7 +86,7 @@ class Batt():
         :return float v_banco: Tensão total do pack de bateria
         """
         # Calcula variação de energia
-        charge = -1 * self._Np * current * dt / 3600  # Converte para horas
+        charge = -1 * current * dt / 3600  # Converte para horas
         energy_variation = self._v_banco * charge
         
         # Calcula nova energia
