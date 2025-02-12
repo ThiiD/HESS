@@ -6,6 +6,9 @@ from UC import Uc
 class Simulation():
     fig_width_cm = 24/2.4
     fig_height_cm = 18/2.4
+    _SoC = []
+    _v_banco = []
+    _i_bat = []
     def __init__(self):
         """
         Método para calcular o fluxo de potência do caminhão.
@@ -62,15 +65,32 @@ class Simulation():
         plt.tight_layout()
         plt.show(block = False)
 
-        i = []
+        
         for power in powers:
             power_bat, power_uc = self.supervisory_control(power)
             i_bat = self._batt.setCurrent(power_bat)
-            i.append(i_bat)
+            self._i_bat.append(i_bat)
+            SoC, v_banco = self._batt.updateEnergy(i_bat, 1)
+            self._SoC.append(SoC)
+            self._v_banco.append(v_banco)
 
-            pass
-        plt.figure()
-        plt.plot(data["Time"], i)
+
+        fig, axs = plt.subplots(figsize = (self.fig_width_cm, self.fig_height_cm), nrows = 3, ncols=1, sharex=True)
+        axs[0].plot(data["Time"], self._SoC, color = "tab:blue", label = "SoC")
+        axs[0].grid()
+        axs[0].legend(loc="upper right")
+        axs[0].set_ylabel("SoC [%]")
+
+        axs[1].plot(data["Time"], self._v_banco, color = "tab:orange", label = "Tensão")
+        axs[1].grid()
+        axs[1].legend(loc="upper right")
+        axs[1].set_ylabel("Tensão [V]")
+
+        axs[2].plot(data["Time"], self._i_bat, color = "tab:green", label = "Corrente")
+        axs[2].grid()
+        axs[2].legend(loc="upper right")
+        axs[2].set_ylabel("Corrente [A]")
+        axs[2].set_xlim(0, data["Time"].iloc[-1])
         plt.show()
 
     

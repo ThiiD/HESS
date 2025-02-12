@@ -8,11 +8,12 @@ class Batt():
         self._Ns = 16
         self._Np = 3
         self._Nm = 24
-        self._Vnom = 3.35
+        self._Vnom = 3.25
         self._SoC = 50
         self._min_SoC = 10  # SoC mínimo permitido (%)
         self._max_SoC = 90  # SoC máximo permitido (%)
-        self._v_banco = self.LUT(self._SoC)  # Calcula v_banco usando o SoC inicial
+        self._v_cel = self.LUT(self._SoC)  # Calcula v_cel usando o SoC inicial
+        self._v_banco = self._v_cel * self._Ns * self._Nm
         self._total_energy = (self._Np * self._C) * (self._Ns * self._Nm * self._Vnom)  # Wh
         self._SoC_Energy = (self._SoC/100) * self._total_energy
 
@@ -39,7 +40,8 @@ class Batt():
         self._Nm = Nm
         self._Vnom = Vnom
         self._SoC = SoC
-        self._v_banco = self.LUT(self._SoC)
+        self._v_cel = self.LUT(self._SoC)  # Calcula v_cel usando o SoC inicial
+        self._v_banco = self._v_cel * self._Ns * self._Nm
         self._total_energy = (Np * C) * (Ns * Nm * Vnom)  # Wh
         self._SoC_Energy = (SoC/100) * self._total_energy
 
@@ -72,19 +74,20 @@ class Batt():
         :param float power: Potência requerida (W)
         :return float: Corrente por célula (A)
         """
-        i = power / self._v_banco
+        i = (power * 1000) / self._v_banco
         ic = i / self._Np
         return np.clip(ic, -6 * self._C, 6 * self._C)  # Limita corrente em ambas direções
 
-    def updateEnergy(self, current: float, dt: float) -> float:
+    def updateEnergy(self, current: float, dt: float) -> (float | float):
         """
         Atualiza a energia total da bateria usando contador de Coulomb
         :param float current: Corrente da bateria (A, + carga, - descarga)
         :param float dt: Intervalo de tempo (s)
-        :return float: Energia atual armazenada (Wh)
+        :return float SoC: SoC da bateria
+        :return float v_banco: Tensão total do pack de bateria
         """
         # Calcula variação de energia
-        charge = current * dt / 3600  # Converte para horas
+        charge = -1 * self._Np * current * dt / 3600  # Converte para horas
         energy_variation = self._v_banco * charge
         
         # Calcula nova energia
@@ -99,6 +102,6 @@ class Batt():
         
         self._SoC_Energy = new_energy
         self._SoC = self.Energy2SoC(new_energy)
-        self._v_banco = self.LUT(self._SoC)
+        self._v_banco = self._Ns * self._Nm * self.LUT(self._SoC)
         
-        return self._SoC_Energy
+        return self._SoC, self._v_banco
