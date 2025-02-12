@@ -15,13 +15,16 @@ class Simulation():
 
 
 
-    def setParam_Batt(self, C, Ns, Np, Nm):
+    def setParam_Batt(self, C : int, Ns : int, Np : int, Nm : int, Vnom : float,SoC : float) -> None:
         """
         :param int C: Taxa de descarga da bateria.
         :param int Ns: Número de baterias em serie.
         :param int Np: Número de baterias em paralelo.
         :param int Nm: Número de modulos.
+        :param float Vnom: Tensão nominal da bateria.
+        :param float SoC: SoC inicial da bateria
         """
+        self._batt.setParams(C, Ns, Np, Nm, Vnom, SoC)
 
     def setParam_UC(self):
         pass
@@ -59,10 +62,16 @@ class Simulation():
         plt.tight_layout()
         plt.show(block = False)
 
+        i = []
         for power in powers:
             power_bat, power_uc = self.supervisory_control(power)
-            self._batt.setCurrent(power_bat)
+            i_bat = self._batt.setCurrent(power_bat)
+            i.append(i_bat)
+
             pass
+        plt.figure()
+        plt.plot(data["Time"], i)
+        plt.show()
 
     
     def supervisory_control(self, power : int) -> tuple:
@@ -85,8 +94,11 @@ if __name__ == "__main__":
     Ns = 16
     Np = 3
     Nm = 24
+    Vnom = 3.35
+    SoC = 50
 
     data = r"data\CR-3112_28-09-24_AGGREGATED.xlsx"
     sheet = "Dados"
     simulation = Simulation()
+    simulation.setParam_Batt(C, Ns, Np, Nm, Vnom, SoC)
     simulation.simulate(data, sheet)
