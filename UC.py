@@ -3,19 +3,27 @@ import numpy as np
 class Uc():
     def __init__(self):
         """Inicializa um banco de supercapacitores com valores padrão"""
-        self._C = 3000  # Capacitância em Farads
-        self._Ns = 200  # Número de capacitores em série
-        self._Np = 10   # Número de strings em paralelo
-        self._Vnom = 2.7  # Tensão nominal (V)
-        self._v_cap = self._Vnom  # Tensão atual do capacitor
-        self._v_banco = self._v_cap * self._Ns  # Tensão total do banco
-        self._min_v = 0.5 * self._Vnom  # Tensão mínima (50% Vnom)
-        self._max_v = self._Vnom  # Tensão máxima
-        self._total_energy = 0.5 * (self._C * self._Np/self._Ns) * (self._v_banco**2)  # Energia em Joules
-        self._stored_energy = self._total_energy  # Energia atual armazenada
+        self._C = 3140                                                                  # Capacitância em Farads
+        self._Ns = 40                                                                   # Número de capacitores em série
+        self._Np = 10                                                                   # Número de strings em paralelo
+        self._Nm = 5                                                                    # Número de módulos em serie
+        self._v_cap = 3                                                                 # Tensão atual do capacitor
+        
+        self._SoC_max = 100                                                             # SoC máximo permitido (%)
+        self._SoC_min = 10                                                              # SoC mínimo permitido (%)
+
+        self._v_total = self._v_cap * self._Ns * self._Nm                               # Tensão total do banco
+        self._min_v = (self._SoC_min / 100) * self._v_cap * self._Ns * self._Nm         # Tensão mínima (30% Vnom)
+        self._max_v = (self._SoC_max / 100 ) * self._v_cap * self._Ns * self._Nm        # Tensão máxima
+        self._v_banco = self._v_cap * self._Ns * self._Nm                               # Tensão total do banco
+        self._total_energy = 0.5 * (self._C * self._Np/self._Ns) * (self._v_banco**2)   # Energia em Joules
+
+        self._SoC = 50                                                                  # Estado de carga inicial (%)
+        self._stored_energy = self.soc2energy(self._SoC)                                # Energia atual armazenada        
+        self._v_atual = self.energy2voltage(self._stored_energy)                        # Tensão atual do banco
 
     def setParams(self, C: float, Ns: int, Np: int, Vnom: float, v_init: float) -> None:
-        """
+        """e
         Configura os parâmetros do banco de supercapacitores
         :param float C: Capacitância por célula (F)
         :param int Ns: Número de capacitores em série
@@ -41,9 +49,25 @@ class Uc():
         self._total_energy = 0.5 * (C * Np/Ns) * (self._v_banco**2)
         self._stored_energy = self._total_energy
 
+    def energy2soc(self, energy: float) -> float:
+        """
+        Calcula SoC baseado na energia armazenada no banco de UC.
+        :param float energy: Energia armazenada (J)
+        :return float: Estado de carga do banco (%)
+        """
+        return (energy / self._total_energy) * 100
+
+    def soc2energy(self, SoC: float) -> float:
+        """
+        Calcula energia armazenada no banco de UC baseada no SoC.
+        :param float SoC: Estado de carga do banco (%)
+        :return float: Energia armazenada (J)
+        """
+        return (SoC/100) * self._total_energy
+
     def voltage2energy(self, voltage: float) -> float:
         """
-        Calcula energia armazenada baseada na tensão
+        Calcula energia armazenada no banco de UC baseada na tensão.
         :param float voltage: Tensão do banco (V)
         :return float: Energia armazenada (J)
         """
@@ -51,7 +75,7 @@ class Uc():
 
     def energy2voltage(self, energy: float) -> float:
         """
-        Calcula tensão baseada na energia armazenada
+        Calcula tensão baseada na energia armazenada no banco de UC.
         :param float energy: Energia armazenada (J)
         :return float: Tensão do banco (V)
         """
@@ -63,7 +87,7 @@ class Uc():
         :param float power: Potência requerida (W)
         :return float: Corrente (A)
         """
-        i = (power * 1000) / self._v_banco
+        i = power / self._v_banco
         i_max = 280 * self._Np  # Limite de corrente típico para supercapacitores
         return np.clip(i, -i_max, i_max)
 
@@ -89,5 +113,6 @@ class Uc():
         self._stored_energy = new_energy
         self._v_banco = self.energy2voltage(new_energy)
         self._v_cap = self._v_banco / self._Ns
+        self._SoC = self.energy2soc(new_energy)
         
         return self._v_banco, self._stored_energy

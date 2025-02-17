@@ -10,11 +10,11 @@ class Batt():
         self._Nm = 24
         self._Vnom = 3.25
         self._SoC = 50
-        self._min_SoC = 10  # SoC mínimo permitido (%)
-        self._max_SoC = 90  # SoC máximo permitido (%)
-        self._v_cel = self.LUT(self._SoC)  # Calcula v_cel usando o SoC inicial
+        self._min_SoC = 10                                                                          # SoC mínimo permitido (%)
+        self._max_SoC = 90                                                                          # SoC máximo permitido (%)
+        self._v_cel = self.LUT(self._SoC)                                                           # Calcula v_cel usando o SoC inicial
         self._v_banco = self._v_cel * self._Ns * self._Nm
-        self._total_energy = (self._Np * self._C) * (self._Ns * self._Nm * self._Vnom)  # Wh
+        self._total_energy = (self._Np * self._C) * (self._Ns * self._Nm * self._Vnom)              # Wh
         self._SoC_Energy = (self._SoC/100) * self._total_energy
 
     def setParams(self, C: float, Ns: int, Np: int, Nm: int, Vnom: float, SoC: float) -> None:
@@ -74,7 +74,7 @@ class Batt():
         :param float power: Potência requerida (W)
         :return float: Corrente por célula (A)
         """
-        i = (power * 1000) / self._v_banco
+        i = power / self._v_banco
         return np.clip(i, -6 * self._Np * self._C, 6 * self._Np * self._C)  # Limita corrente em ambas direções
 
     def updateEnergy(self, current: float, dt: float) -> (float | float):
