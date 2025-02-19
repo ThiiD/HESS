@@ -53,6 +53,7 @@ class Batt():
         """
         try:
             df = pd.read_csv("data\\LUT_batt.csv", sep=";")
+            df["SoC"] = 100 - df["SoC"]  # Inverte SoC para corresponder ao padrão de carga
             indice_proximo = (df['SoC'] - SoC).abs().idxmin()
             tensao = df.loc[indice_proximo, 'Tensao']
             return float(tensao)

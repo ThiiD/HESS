@@ -10,7 +10,7 @@ class Uc():
         self._v_cap = 3                                                                 # Tensão atual do capacitor
         
         self._SoC_max = 100                                                             # SoC máximo permitido (%)
-        self._SoC_min = 10                                                              # SoC mínimo permitido (%)
+        self._SoC_min = 0                                                              # SoC mínimo permitido (%)
 
         self._v_total = self._v_cap * self._Ns * self._Nm                               # Tensão total do banco
         self._min_v = (self._SoC_min / 100) * self._v_cap * self._Ns * self._Nm         # Tensão mínima (30% Vnom)
@@ -88,7 +88,7 @@ class Uc():
         :return float: Corrente (A)
         """
         i = power / self._v_banco
-        i_max = 280 * self._Np  # Limite de corrente típico para supercapacitores
+        i_max = 280 * self._Np                                      # Corrente maxima no banco de UC
         return np.clip(i, -i_max, i_max)
 
     def updateEnergy(self, current: float, dt: float) -> tuple[float, float]:
@@ -99,7 +99,7 @@ class Uc():
         :return tuple[float, float]: (Tensão do banco, Energia armazenada)
         """
         # Calcula variação de energia (P = V*I)
-        energy_variation = self._v_banco * current * dt
+        energy_variation = -1 * self._v_banco * current * dt
         
         # Atualiza energia armazenada
         new_energy = self._stored_energy + energy_variation
@@ -115,4 +115,4 @@ class Uc():
         self._v_cap = self._v_banco / self._Ns
         self._SoC = self.energy2soc(new_energy)
         
-        return self._v_banco, self._stored_energy
+        return self._SoC, self._v_banco

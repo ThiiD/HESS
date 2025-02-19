@@ -17,7 +17,7 @@ class Simulation():
         # Dados do supercapacitor
         self._v_banco_uc = []
         self._i_uc = []
-        self._e_uc = []
+        self._SoC_UC = []
         
         self._uc = Uc()
         self._batt = Batt()
@@ -53,9 +53,22 @@ class Simulation():
         plt.tight_layout()
         plt.show(block=False)
 
+    def plot_LUT(self):
+        """Plota LUT da bateria"""
+        df = pd.read_csv("data\\LUT_batt.csv", sep=";")
+        plt.figure(figsize=(self.fig_width_cm, self.fig_height_cm/2))
+        plt.plot(100 - df["SoC"], df["Tensao"], color = 'tab:blue', linewidth = 2, label = "LUT Bateria")   
+        plt.grid()
+        plt.legend(loc="upper left")
+        plt.ylabel("Tensão [V]")
+        plt.xlabel("SoC [%]")
+        plt.title("Curva SoC x Tensão da bateria")
+        plt.xlim(0, 100)
+        plt.show(block = False)
+
     def plot_results(self, time):
         """Plota resultados da simulação"""
-        fig, axs = plt.subplots(3, 2, figsize=(self.fig_width_cm*2, self.fig_height_cm))
+        fig, axs = plt.subplots(3, 2, figsize=(self.fig_width_cm*2, self.fig_height_cm), sharex=True)
         
         # Bateria (coluna esquerda)
         axs[0,0].step(time, self._SoC, linewidth=2, color="tab:blue", label="SoC Bateria")
@@ -72,22 +85,26 @@ class Simulation():
         axs[2,0].grid()
         axs[2,0].legend(loc="upper right")
         axs[2,0].set_ylabel("Corrente [A]")
+        axs[2,0].set_xlabel("Tempo [s]")
+        axs[2,0].set_xlim(0, time.iloc[-1])
         
         # Supercapacitor (coluna direita)
-        axs[0,1].step(time, self._v_banco_uc, linewidth=2, color="tab:blue", label="Tensão UC")
+        axs[0,1].step(time, self._SoC_UC, linewidth=2, color="tab:blue", label="SoC UC")
         axs[0,1].grid()
         axs[0,1].legend(loc="upper right")
-        axs[0,1].set_ylabel("Tensão [V]")
+        axs[0,1].set_ylabel("SoC [%]")
 
-        axs[1,1].step(time, self._i_uc, linewidth=2, color="tab:orange", label="Corrente UC")
+        axs[1,1].step(time, self._v_banco_uc, linewidth=2, color="tab:orange", label="Tensão UC")
         axs[1,1].grid()
         axs[1,1].legend(loc="upper right")
-        axs[1,1].set_ylabel("Corrente [A]")
+        axs[1,1].set_ylabel("Tensão [V]")
 
-        axs[2,1].step(time, self._e_uc, linewidth=2, color="tab:green", label="Energia UC")
+        axs[2,1].step(time, self._i_uc, linewidth=2, color="tab:green", label="Corrente UC")
         axs[2,1].grid()
         axs[2,1].legend(loc="upper right")
-        axs[2,1].set_ylabel("Energia [J]")
+        axs[2,1].set_ylabel("Corrente [A]")
+        axs[2,1].set_xlabel("Tempo [s]")
+        axs[2,1].set_xlim(0, time.iloc[-1])
         
         plt.tight_layout()
         plt.show()
@@ -100,6 +117,8 @@ class Simulation():
         
         # Plota distribuição de potência
         self.plot_power_distribution(data, powers)
+        # Plota LUT bateria
+        self.plot_LUT()
         
         # Simulação
         for power in powers:
@@ -112,15 +131,15 @@ class Simulation():
             
             # Atualiza supercapacitor
             i_uc = self._uc.setCurrent(power_uc)
-            v_banco_uc, e_uc = self._uc.updateEnergy(i_uc, 1)
+            SoC_uc, v_banco_uc = self._uc.updateEnergy(i_uc, 1)
             
             # Armazena resultados
             self._SoC.append(SoC)
             self._v_banco_bat.append(v_banco_bat)
             self._i_bat.append(i_bat)
-            self._v_banco_uc.append(v_banco_uc)
+            self._SoC_UC.append(SoC_uc)
             self._i_uc.append(i_uc)
-            self._e_uc.append(e_uc)
+            self._v_banco_uc.append(v_banco_uc)
 
         # Plota resultados
         self.plot_results(data["Time"])
@@ -128,10 +147,11 @@ class Simulation():
     def supervisory_control(self, power: float) -> tuple[float, float]:
         """Estratégia de controle para distribuição de potência"""
         # Estratégia: UC absorve potências de pico
-        power = power * 1000 # Conversão para W
-        if abs(power) > 1000000:  # 1000MW
-            power_uc = power - 1000000 if power > 0 else power + 1000000
-            power_bat = 1000000 if power > 0 else -1000000
+        power = power * 1000                            # Conversão para W
+        threshold = 1000 * 1000                         # 5MW
+        if abs(power) > threshold:                        # 1000MW
+            power_uc = power - threshold if power > 0 else power + threshold
+            power_bat = threshold if power > 0 else -threshold
         else:
             power_uc = 0
             power_bat = power
