@@ -227,7 +227,7 @@ class Simulation():
 
 
         # Dimensiona bateria
-        Vnom_bat = 3.35  # V
+        Vnom_bat = 3.2  # V
         C_bat = 40       # Ah
         energy_cell_bat = Vnom_bat * C_bat  # Wh por célula
         
@@ -300,7 +300,7 @@ if __name__ == "__main__":
     # Parâmetros da bateria para diferentes níveis de tensão
     voltage_configs_bat = {
         540: {"Ns": 16, "Nm": 10},   # 16 * 10 * 3.35 ≈ 540V
-        720: {"Ns": 16, "Nm": 13},   # 16 * 13 * 3.35 ≈ 720V
+        720: {"Ns": 16, "Nm": 14},   # 16 * 13 * 3.35 ≈ 720V
         960: {"Ns": 16, "Nm": 18},   # 16 * 18 * 3.35 ≈ 960V
         1080: {"Ns": 16, "Nm": 20},  # 16 * 20 * 3.35 ≈ 1080V
         1260: {"Ns": 16, "Nm": 24},  # 16 * 24 * 3.35 ≈ 1260V
