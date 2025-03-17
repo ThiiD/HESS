@@ -69,22 +69,27 @@ class Batt():
         """
         return (energy * 100) / self._total_energy
 
-    def setCurrent(self, power: float) -> float:
+    def setCurrent(self, power: float) -> (float | float):
         """
         Calcula a corrente por célula baseada na potência requerida
         :param float power: Potência requerida (W)
-        :return float: Corrente por célula (A)
+        :return float i_sat: Corrente por célula (A)
+        :return float p_reject: Potência rejeitada (kW)
         """
         i = power / self._v_banco
-        return np.clip(i, -6 * self._Np * self._C, 6 * self._Np * self._C)  # Limita corrente em ambas direções
+        i_sat = np.clip(i, -6 * self._Np * self._C, 6 * self._Np * self._C)  # Limita corrente em ambas direções
+        i_reject = i - i_sat                                                 # Calcula corrente rejeitada
+        p_reject = (i_reject * self._v_banco)/1000                           # Calcula potência rejeitada
+        return i_sat, p_reject
 
-    def updateEnergy(self, current: float, dt: float) -> (float | float):
+    def updateEnergy(self, current: float, dt: float) -> (float | float | float):
         """
         Atualiza a energia total da bateria usando contador de Coulomb
         :param float current: Corrente da bateria (A, + carga, - descarga)
         :param float dt: Intervalo de tempo (s)
         :return float SoC: SoC da bateria
         :return float v_banco: Tensão total do pack de bateria
+        :return float p_reject: Potência rejeitada (kW)
         """
         # Calcula variação de energia
         charge = -1 * current * dt / 3600  # Converte para horas
@@ -94,14 +99,17 @@ class Batt():
         new_energy = self._SoC_Energy + energy_variation
         
         # Limita energia entre mínimo e máximo
-        new_energy = np.clip(
+        clip_energy = np.clip(
             new_energy, 
             (self._min_SoC/100) * self._total_energy,
             (self._max_SoC/100) * self._total_energy
         )
+        p_reject = ((new_energy - clip_energy) / dt) / 1000             # Potência rejeitada (kW)
+
+
         
-        self._SoC_Energy = new_energy
-        self._SoC = self.Energy2SoC(new_energy)
+        self._SoC_Energy = clip_energy
+        self._SoC = self.Energy2SoC(clip_energy)
         self._v_banco = self._Ns * self._Nm * self.LUT(self._SoC)
         
-        return self._SoC, self._v_banco
+        return self._SoC, self._v_banco, p_reject

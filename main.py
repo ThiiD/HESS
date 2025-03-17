@@ -14,12 +14,16 @@ class Simulation():
         self._SoC = []
         self._v_banco_bat = []
         self._i_bat = []
-        
+        self._p_bat_reject = []
+
         # Dados do supercapacitor
         self._v_banco_uc = []
         self._i_uc = []
         self._SoC_UC = []
+        self._p_uc_reject = []
         
+        self._p_reject = []
+
         self._uc = Uc()
         self._batt = Batt()
 
@@ -34,6 +38,14 @@ class Simulation():
         :param float SoC: Estado de carga inicial da bateria (%)
         :raises ValueError: Se os parâmetros forem inválidos
         """
+        self._batt_params = {
+            'C': C,
+            'Ns': Ns,
+            'Np': Np,
+            'Nm': Nm,
+            'Vnom': Vnom,
+            'SoC': SoC
+        }
         self._batt.setParams(C, Ns, Np, Nm, Vnom, SoC)
 
     def setParam_UC(self, C: float, Ns: int, Np: int, Nm : int, Vnom: float, SoC: float) -> None:
@@ -45,6 +57,14 @@ class Simulation():
         :param float Vnom: Tensão nominal do supercapacitor (V)
         :param float SoC: Estado de carga inicial do supercapacitor (%)
         """
+        self._uc_params = {
+            'C': C,
+            'Ns': Ns,
+            'Np': Np,
+            'Nm': Nm,
+            'Vnom': Vnom,
+            'SoC': SoC
+        }
         self._uc.setParams(C, Ns, Np, Nm, Vnom, SoC)
 
     def plot_power_distribution(self, data, powers):
@@ -147,23 +167,32 @@ class Simulation():
             power_bat, power_uc = self.supervisory_control(power, threshold)
             
             # Atualiza bateria
-            i_bat = self._batt.setCurrent(power_bat)
-            SoC, v_banco_bat = self._batt.updateEnergy(i_bat, 1)
+            i_bat, p_bat_reject_1 = self._batt.setCurrent(power_bat)
+            SoC, v_banco_bat, p_bat_reject_2 = self._batt.updateEnergy(i_bat, 1)
+            p_bat_reject = p_bat_reject_1 + p_bat_reject_2
             
             # Atualiza supercapacitor
-            i_uc = self._uc.setCurrent(power_uc)
-            SoC_uc, v_banco_uc = self._uc.updateEnergy(i_uc, 1)
+            i_uc, p_uc_reject_1 = self._uc.setCurrent(power_uc)
+            SoC_uc, v_banco_uc, p_uc_reject_2 = self._uc.updateEnergy(i_uc, 1)
+            p_uc_reject = p_uc_reject_1 + p_uc_reject_2
+
+            p_reject = p_bat_reject + p_uc_reject
             
             # Armazena resultados
             self._SoC.append(SoC)
             self._v_banco_bat.append(v_banco_bat)
             self._i_bat.append(i_bat)
+            self._p_bat_reject.append(p_bat_reject)
+
             self._SoC_UC.append(SoC_uc)
             self._i_uc.append(i_uc)
             self._v_banco_uc.append(v_banco_uc)
+            self._p_uc_reject.append(p_uc_reject)
+
+            self._p_reject.append(p_reject)
 
         # Plota resultados
-        print(self._SoC_UC)                                     # APAGAR DEPOIS
+        # print(self._SoC_UC)                                     # APAGAR DEPOIS
         self.plot_results(data["Time"])
 
     def supervisory_control(self, power: float, threshold : float) -> tuple[float, float]:
@@ -196,7 +225,12 @@ class Simulation():
         """
         # Converte threshold para W
         threshold = threshold * 1000
-        
+
+        # DoD desejado
+        DoD_b = 0.3
+        DoD_UC = 0.6
+
+
         # Calcula potências
         powers = (data['Traction Power'] - data["Braking Power"]) * 1000  # Converte para W
         
@@ -218,10 +252,12 @@ class Simulation():
         
         # Encontra máximas energias acumuladas
         max_energy_bat = np.max(np.abs(energy_bat))             
-        max_energy_uc = np.max(np.abs(energy_uc))               
+        max_energy_uc = np.max(np.abs(energy_uc))    
+
+        print(f'max_energy_bat: {max_energy_bat} Wh ;   max_energy_uc: {max_energy_uc} Wh')           
         
         # Aplicação fator de segurança
-        n = 1.2
+        n = 1
         max_energy_bat *= n
         max_energy_uc *= n
 
@@ -232,7 +268,7 @@ class Simulation():
         energy_cell_bat = Vnom_bat * C_bat  # Wh por célula
         
         # Número de células necessárias
-        N_cells_bat = np.ceil(max_energy_bat / energy_cell_bat)
+        N_cells_bat = np.ceil(max_energy_bat / (DoD_b * energy_cell_bat))
         
         # Configura arranjo (otimização básica)
         Ns_bat = config_bat["Ns"]
@@ -242,7 +278,7 @@ class Simulation():
         
         # Dimensiona supercapacitor
         Vnom_uc = 3   # V
-        C_uc = 3000     # F
+        C_uc = 3140     # F
         
         # Energia máxima por célula UC (E = 1/2 * C * V²)
         #energy_cell_uc = 0.5 * C_uc * (Vnom_uc**2) / 3600  # Wh
@@ -252,11 +288,11 @@ class Simulation():
         Nm_uc = config_uc["Nm"]
 
         # Calculo para numero de celulas em paralelo
-        C_t = 2 * max_energy_uc/ ((Vnom_uc * Ns_uc * Nm_uc )**2)  # F
+        C_t = 2 * ((max_energy_uc * 3600) / (DoD_UC * (Vnom_uc * Ns_uc * Nm_uc )**2)) # F
         Np_uc = np.ceil((C_t * Ns_uc * Nm_uc) / C_uc)
 
-        if Np_uc < 3: # COndição para conseguir absorver a potencia de pico
-            Np_uc = 3
+        if Np_uc == 0: # Condição para geração do sistema de UC
+            Np_uc = 1
         
         # Número de células necessárias
         #N_cells_uc = np.ceil(max_energy_uc / energy_cell_uc)
@@ -285,6 +321,42 @@ class Simulation():
         }
         
         return battery_params, uc_params
+    
+    def save_data(self, path: str, therehold: int) -> None:
+        """
+        Método para salvar os dados de simulação.
+        :param str path: Caminho para salvar os dados
+        :param int threshold: Limiar de potência para distribuição (kW)
+        """
+        nome = f"simulacao_{threshold}kW.pkl"
+        data = {
+            "Tempo"          : range(0, len(self._SoC)),
+            "C_bat"          : self._batt_params['C'],
+            "Ns_bat"         : self._batt_params['Ns'],
+            "Np_bat"         : self._batt_params['Np'],
+            "Nm_bat"         : self._batt_params['Nm'],
+            "Vnom_bat"       : self._batt_params['Vnom'],
+            "SoC_inicial_bat": self._batt_params['SoC'],
+            'SoC_bat': self._SoC,
+            'v_banco_bat': self._v_banco_bat,
+            'i_bat': self._i_bat,
+            'p_bat_reject': self._p_bat_reject,
+            'C_uc': self._uc_params['C'],
+            'Ns_uc': self._uc_params['Ns'],
+            'Np_uc': self._uc_params['Np'],
+            'Nm_uc': self._uc_params['Nm'],
+            'Vnom_uc': self._uc_params['Vnom'],
+            'SoC_inicial_uc': self._uc_params['SoC'],
+            'SoC_UC': self._SoC_UC,
+            'v_banco_uc': self._v_banco_uc,
+            'i_uc': self._i_uc,
+            'p_uc_reject': self._p_uc_reject,
+            'p_reject': self._p_reject
+        }
+        
+        df = pd.DataFrame(data)
+        df.to_pickle(path + nome)
+
 
 if __name__ == "__main__":
     data = r"data\CR-3112_28-09-24_AGGREGATED.xlsx"
@@ -295,32 +367,32 @@ if __name__ == "__main__":
     df = pd.read_excel(data, sheet_name=sheet)
     
     # Dimensiona componentes
-    threshold = 1000  # 500 kW
+    threshold = 600  # 500 kW
 
     # Parâmetros da bateria para diferentes níveis de tensão
     voltage_configs_bat = {
-        540: {"Ns": 16, "Nm": 11},   # 16 * 10 * 3.35 ≈ 540V
-        720: {"Ns": 16, "Nm": 14},   # 16 * 13 * 3.35 ≈ 720V
-        960: {"Ns": 16, "Nm": 19},   # 16 * 18 * 3.35 ≈ 960V
-        1080: {"Ns": 16, "Nm": 21},  # 16 * 20 * 3.35 ≈ 1080V
-        1260: {"Ns": 16, "Nm": 25},  # 16 * 24 * 3.35 ≈ 1260V
-        1440: {"Ns": 16, "Nm": 28}   # 16 * 27 * 3.35 ≈ 1440V
+        540: {"Ns": 16, "Nm": 10},   # 16 * 10 * 3.35 ≈ 540V
+        720: {"Ns": 16, "Nm": 13},   # 16 * 13 * 3.35 ≈ 720V
+        960: {"Ns": 16, "Nm": 18},   # 16 * 18 * 3.35 ≈ 960V
+        1080: {"Ns": 16, "Nm": 20},  # 16 * 20 * 3.35 ≈ 1080V
+        1260: {"Ns": 16, "Nm": 24},  # 16 * 24 * 3.35 ≈ 1260V
+        1440: {"Ns": 16, "Nm": 27}   # 16 * 27 * 3.35 ≈ 1440V
     }
 
     # Seleciona configuração desejada
     target_voltage_bat = 1260  # Escolha uma das tensões válidas
     config_bat = voltage_configs_bat[target_voltage_bat]
 
-    # Parâmetros do supercapacitor para diferentes níveis de tensão
-    voltage_configs_uc = { 240 : {"Ns": 8, "Nm" : 10},  # 8 * 10 * 3.0 ≈ 240V
-                           360 : {"Ns": 8, "Nm" : 15},  # 8 * 15 * 3.0 ≈ 360V
-                           480 : {"Ns": 8, "Nm" : 20},  # 8 * 20 * 3.0 ≈ 480V
-                           600 : {"Ns": 8, "Nm" : 25},  # 8 * 25 * 3.0 ≈ 600V
-                           720 : {"Ns": 8, "Nm" : 30},  # 8 * 30 * 3.0 ≈ 720V
-                        }   
-    
+    # Parâmetros do supercapacitor para diferentes níveis de tensão    
+    voltage_configs_uc = {240  : {"Ns": 16, "Nm" : 5},  # 16 * 5 * 3.0 ≈ 240V
+                          480  : {"Ns": 16, "Nm" : 10},  # 16 * 10 * 3.0 ≈ 480V
+                          720  : {"Ns": 16, "Nm" : 15},  # 16 * 15 * 3.0 ≈ 720V
+                          960  : {"Ns": 16, "Nm" : 20},  # 16 * 20 * 3.0 ≈ 960V
+                          1200 : {"Ns": 16, "Nm" : 25},  # 16 * 25 * 3.0 ≈ 1200V
+    }
+
     # Seleciona configuração desejada
-    target_voltage_uc = 480  # Escolha uma das tensões válidas
+    target_voltage_uc = 960  # Escolha uma das tensões válidas
     config_uc = voltage_configs_uc[target_voltage_uc]
 
 
@@ -366,9 +438,12 @@ if __name__ == "__main__":
     
     # Executa simulação
     simulation.simulate(data, sheet, threshold)
+    simulation.save_data(r"resultados\\", threshold)
     
     # Mostra resultados do dimensionamento
     print("\nResultados do dimensionamento:")
+    print(f"Limiar: {threshold} kW")
+
     print(f"\nBateria:")
     print(f"Energia máxima: {batt_params['max_energy']:.2f} Wh")
     print(f"Número de células: {batt_params['Ns']*batt_params['Np']*batt_params['Nm']}")

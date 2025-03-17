@@ -49,9 +49,11 @@ class Uc():
 
         # Recalcula parâmetros
         self._v_total = self._v_cap * self._Ns * self._Nm
-        self._v_banco = self._v_total * (SoC/100)
-        self._C_eq = C * Np/(Ns * Nm)
         self._total_energy = 0.5 * self._C_eq * (self._v_total**2)
+        
+        self._v_banco = self._v_total * (self._SoC/100)
+        self._C_eq = C * Np/(Ns * Nm)
+        
         self._stored_energy = 0.5 * self._C_eq * (self._v_banco**2)
 
     def energy2soc(self, energy: float) -> float:
@@ -89,15 +91,19 @@ class Uc():
         """
         return np.sqrt((2 * energy) / (self._C * self._Np/(self._Ns * self._Nm)))
 
-    def setCurrent(self, power: float) -> float:
+    def setCurrent(self, power: float) -> (float|float):
         """
         Calcula corrente baseada na potência requerida
         :param float power: Potência requerida (W)
-        :return float: Corrente (A)
+        :return float i_sat: Corrente (A)
+        :return float p_reject: Potência rejeitada (kW)
         """
         i = power / self._v_banco
         i_max = 280 * self._Np                                      # Corrente maxima no banco de UC
-        return np.clip(i, -i_max, i_max)
+        i_sat = np.clip(i, -i_max, i_max)                           # Limita corrente em ambas direções
+        i_reject = i - i_sat                                        # Calcula corrente rejeitada
+        p_reject = (i_reject * self._v_banco) / 1000                # Calcula potência rejeitada
+        return i_sat, p_reject
 
     def updateEnergy(self, current: float, dt: float) -> tuple[float, float]:
         """
@@ -115,11 +121,13 @@ class Uc():
         # Limita energia baseado no SoC
         max_energy = self._total_energy * (self._SoC_max/100)
         min_energy = self._total_energy * (self._SoC_min/100)
-        new_energy = np.clip(new_energy, min_energy, max_energy)
+        clip_energy = np.clip(new_energy, min_energy, max_energy)
+
+        p_reject = ((new_energy - clip_energy) / dt) / 1000         # Potência rejeitada (kW)
         
         # Atualiza estados
-        self._stored_energy = new_energy
-        self._SoC = (new_energy / self._total_energy) * 100
-        self._v_banco = np.sqrt((2 * new_energy) / self._C_eq)
+        self._stored_energy = clip_energy
+        self._SoC = (clip_energy / self._total_energy) * 100
+        self._v_banco = np.sqrt((2 * clip_energy) / self._C_eq)
         
-        return self._SoC, self._v_banco
+        return self._SoC, self._v_banco, p_reject
